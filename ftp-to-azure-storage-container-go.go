@@ -103,6 +103,13 @@ func main() {
 	}
 
 	// upload file
+	for _, file := range files {
+		blobURL := containerURL.NewBlockBlobURL(file.FileName)
+		_, err := azblob.UploadBufferToBlockBlob(ctx,file.Data,blobURL,azblob.UploadToBlockBlobOptions{})
+		if err != nil {
+			log.Fatalf("Doom %v",file.FileName)
+		}
+	}
 
 	// store some metadata somewhere
 }
