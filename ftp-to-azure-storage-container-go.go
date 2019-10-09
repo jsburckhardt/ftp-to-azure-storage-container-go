@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/jlaffaye/ftp"
 )
 
@@ -20,7 +25,7 @@ func main() {
 	// load config from env variables.
 	// TODO: use viper to load config.
 	// TODO: verify if port comes with our without :
-	accountName, accountKey, ftpServer, ftpPort, ftpUsername, ftpPassword, ftpPath := os.Getenv("STORAGE_ACCOUNT_NAME"), os.Getenv("STORAGE_ACCESS_KEY"), os.Getenv("FTPSERVER"), os.Getenv("FTPPORT"), os.Getenv("FTPUSERNAME"), os.Getenv("FTPPASSWORD"), os.Getenv("FTPPATH")
+	storageAccountName, storageAccountKey, storageContainer, ftpServer, ftpPort, ftpUsername, ftpPassword, ftpPath := os.Getenv("STORAGE_ACCOUNT_NAME"), os.Getenv("STORAGE_ACCESS_KEY"), os.Getenv("STORAGE_CONTAINER"), os.Getenv("FTPSERVER"), os.Getenv("FTPPORT"), os.Getenv("FTPUSERNAME"), os.Getenv("FTPPASSWORD"), os.Getenv("FTPPATH")
 
 	// connect to ftp server
 	conn := ftpServer + ":" + ftpPort
@@ -70,17 +75,32 @@ func main() {
 		tempfile.Data = buf
 		files = append(files, tempfile)
 		ftpdata.Close()
-		fmt.Printf("\rOn %d/%d", i, len(entries))
+		fmt.Printf("\rOn %d/%d", i+1, len(entries))
 		//fmt.Printf("%v. Got file %v\n", i+1, tempfile.FileName)
 	}
 	fmt.Printf("\nReceived %v files.\n", len(files))
-	fmt.Printf("hello, %v, %v", accountName, accountKey)
 
 	// upload files to storage account
-
 	// connect to storage account
+	skc, err := azblob.NewSharedKeyCredential(storageAccountName, storageAccountKey)
+	if err != nil {
+		log.Fatalf("Error generating key to storage account. Error: %v", err)
+	}
+	pipeline := azblob.NewPipeline(skc, azblob.PipelineOptions{})
+	url, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/%s", storageAccountName, storageContainer))
+	containerURL := azblob.NewContainerURL(*url, pipeline)
 
 	// verify container
+	ctx := context.Background()
+	log.Printf("Creating container %v", storageContainer)
+	_, err = containerURL.Create(ctx, azblob.Metadata{}, azblob.PublicAccessBlob)
+	if err != nil {
+		if strings.Contains(err.Error(), "Code: ContainerAlreadyExists") {
+			log.Printf("Container %v already exists", storageContainer)
+		} else {
+			log.Fatalf("Can't create container %v. Error: %v", storageContainer, err)
+		}
+	}
 
 	// upload file
 
