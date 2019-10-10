@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
@@ -65,8 +66,8 @@ func main() {
 			fmt.Printf("Error while reading data: %v", err)
 			continue
 		}
-		buf := make([]byte, entry.Size)
-		_, err = ftpdata.Read(buf)
+
+		buf, err := ioutil.ReadAll(ftpdata)
 		if err != nil {
 			fmt.Printf("Error while storing data into buffer: %v", err)
 			continue
@@ -75,8 +76,7 @@ func main() {
 		tempfile.Data = buf
 		files = append(files, tempfile)
 		ftpdata.Close()
-		fmt.Printf("\rOn %d/%d", i+1, len(entries))
-		//fmt.Printf("%v. Got file %v\n", i+1, tempfile.FileName)
+		fmt.Printf("\rDownloading file %d/%d", i+1, len(entries))
 	}
 	fmt.Printf("\nReceived %v files.\n", len(files))
 
@@ -103,11 +103,12 @@ func main() {
 	}
 
 	// upload file
-	for _, file := range files {
+	for i, file := range files {
+		fmt.Printf("\rUploading %d/%d", i+1, len(files))
 		blobURL := containerURL.NewBlockBlobURL(file.FileName)
-		_, err := azblob.UploadBufferToBlockBlob(ctx,file.Data,blobURL,azblob.UploadToBlockBlobOptions{})
+		_, err := azblob.UploadBufferToBlockBlob(ctx, file.Data, blobURL, azblob.UploadToBlockBlobOptions{})
 		if err != nil {
-			log.Fatalf("Doom %v",file.FileName)
+			log.Fatalf("Doom %v", file.FileName)
 		}
 	}
 
