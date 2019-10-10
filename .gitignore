@@ -12,3 +12,7 @@
 *.out
 
 # local environment variables
+env.local.ftp-to-azure-storage-container-go
+
+# vscode
+.vscode
