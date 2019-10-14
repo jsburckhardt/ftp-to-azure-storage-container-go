@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
+	"io"
+
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -18,7 +21,7 @@ func main() {
 	log.Printf("Function triggered at %v\n", time.Now())
 	// load config from env variables.
 	// TODO: use viper to load config.
-	// TODO: verify if port comes with our without :
+	// TODO: verify if port comes with or without :
 	storageAccountName, storageAccountKey, storageContainer, ftpServer, ftpPort, ftpUsername, ftpPassword, ftpPath := os.Getenv("STORAGE_ACCOUNT_NAME"), os.Getenv("STORAGE_ACCESS_KEY"), os.Getenv("STORAGE_CONTAINER"), os.Getenv("FTPSERVER"), os.Getenv("FTPPORT"), os.Getenv("FTPUSERNAME"), os.Getenv("FTPPASSWORD"), os.Getenv("FTPPATH")
 
 	// Connecting to Azure Storage Account
@@ -57,6 +60,7 @@ func main() {
 	// the ftp server now we are going to
 	// Create container in storage
 	ctx := context.Background()
+
 	log.Printf("Creating container %v", storageContainer)
 	_, err = containerURL.Create(ctx, azblob.Metadata{}, azblob.PublicAccessBlob)
 	if err != nil {
@@ -93,7 +97,40 @@ func main() {
 		ftpdata.Close()
 		fmt.Printf("\rDownloading file %d/%d", i+1, len(entries))
 
+		// generating hash to validate if file exists
+		h := md5.New()
+		io.WriteString(h, string(buf))
+		hash := fmt.Sprintf("%x", h.Sum(nil))
 		blobURL := containerURL.NewBlockBlobURL(entry.Name)
+
+		// Checking if blob exists and retrieving the properties.
+		existingBlobProperties, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{})
+		if err != nil && strings.Contains(err.Error(), "BlobNotFound") {
+			_, err = azblob.UploadBufferToBlockBlob(ctx, buf, blobURL, azblob.UploadToBlockBlobOptions{})
+			log.Printf("Uploading file %v", entry.Name)
+			if err != nil {
+				log.Printf("Couldn't uploade file %v. Error: %v", entry.Name, err)
+				ftpdata.Close()
+				continue
+			}
+		} else if err != nil {
+			log.Printf("Couldn't uploade file %v. Error: %v", entry.Name, err)
+			ftpdata.Close()
+			continue
+		} else if fmt.Sprintf("%x", existingBlobProperties.ContentMD5()) == hash {
+			log.Printf("File %v already in storage account", entry.Name)
+			ftpdata.Close()
+			continue
+		} else {
+			_, err = azblob.UploadBufferToBlockBlob(ctx, buf, blobURL, azblob.UploadToBlockBlobOptions{})
+			log.Printf("File %v already in storage account but wrong hash... replacing", entry.Name)
+			if err != nil {
+				log.Printf("Couldn't uploade file %v. Error: %v", entry.Name, err)
+				ftpdata.Close()
+				continue
+			}
+		}
+
 		_, err = azblob.UploadBufferToBlockBlob(ctx, buf, blobURL, azblob.UploadToBlockBlobOptions{})
 		if err != nil {
 			log.Fatalf("Doom %v", entry.Name)
