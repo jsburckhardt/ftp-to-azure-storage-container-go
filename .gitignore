@@ -16,3 +16,7 @@ env.local.ftp-to-azure-storage-container-go
 
 # vscode
 .vscode
+
+# binary
+ftptoazurestorage
+ftp-to-azure-storage-container-go
